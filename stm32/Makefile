@@ -18,10 +18,10 @@ CFLAGS += -Os
 endif
 
 stm32.bin: stm32
-	$(OBJCOPY) stm32 stm32.bin -O binary
+	$(OBJCOPY) $^ $@ -O binary
 
 stm32: vec.o main.o boot.o
-	$(CC) $^ -o stm32 $(LDFLAGS)
+	$(CC) $^ -o $@ $(LDFLAGS)
 
 flash: stm32.bin
 ifeq ($(DEBUG),1)
