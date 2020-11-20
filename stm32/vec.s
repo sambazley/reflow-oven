@@ -8,15 +8,15 @@ none: b .
 .word reset         /* Reset */
 .word none          /* NMI */
 .word none          /* HardFault */
-.word none          /* MemManage */
-.word none          /* BusFault */
-.word none          /* UsageFault */
+.word none          /* Reserved */
+.word none          /* Reserved */
+.word none          /* Reserved */
 .word none          /* Reserved */
 .word none          /* Reserved */
 .word none          /* Reserved */
 .word none          /* Reserved */
 .word none          /* SVCall */
-.word none          /* Debug Monitor */
+.word none          /* Reserved */
 .word none          /* Reserved */
 .word none          /* PendSV */
 .word none          /* SysTick */
