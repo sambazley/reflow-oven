@@ -1,54 +1,36 @@
+/* Copyright (C) 2021 Sam Bazley
+ *
+ * This software is provided 'as-is', without any express or implied
+ * warranty.  In no event will the authors be held liable for any damages
+ * arising from the use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not
+ *    claim that you wrote the original software. If you use this software
+ *    in a product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+ */
+
+#include "io.h"
+#include "oven.h"
+#include "usb.h"
 #include <stm32f0xx.h>
 
-#define LED_B 0
-#define LED_G 1
-#define RELAY 3
+//milliseconds
+#define INTERVAL 500
 
-#define CLK 5
-#define MISO 6
-#define CS 7
-
-static volatile struct {
-	volatile uint8_t OC : 1;
-	volatile uint8_t SCG : 1;
-	volatile uint8_t SCV : 1;
-	volatile uint8_t _1 : 1;
-	volatile uint16_t ref_temp : 12;
-	volatile uint8_t fault : 1;
-	volatile uint8_t _2 : 1;
-	volatile uint16_t thermo_temp : 14;
-} __attribute__((packed)) thermo;
-
-static void openocd_send_str(const char *str) {
-#ifdef DEBUG
-	__asm__("mov r0, #0x04;"
-			"mov r1, %[msg];"
-			"bkpt #0xAB"
-			:
-			: [msg] "r" (str)
-			: "r0", "r1", "memory");
-#else
-	(void) str;
-#endif
-}
-
-static void spi_setup() {
-	RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
-
-	SPI1->CR1 &= ~SPI_CR1_CPHA;
-	SPI1->CR1 |= SPI_CR1_SSI | SPI_CR1_SSM;
-	SPI1->CR1 |= SPI_CR1_MSTR;
-	SPI1->CR1 |= SPI_CR1_BR_2;
-	SPI1->CR2 &= ~SPI_CR2_DS_3;
-	SPI1->CR2 |= SPI_CR2_FRXTH;
-	SPI1->CR1 |= SPI_CR1_RXONLY;
-}
-
-static void timer_setup() {
+static void timer_init()
+{
 	RCC->APB1ENR |= RCC_APB1ENR_TIM14EN;
 
 	TIM14->PSC = 7999;
-	TIM14->ARR = 500; //500 ms
+	TIM14->ARR = INTERVAL;
 	TIM14->CNT = 0;
 
 	TIM14->DIER |= TIM_DIER_UIE;
@@ -58,147 +40,17 @@ static void timer_setup() {
 	NVIC_EnableIRQ(TIM14_IRQn);
 }
 
-static void spi_thermo_recv() {
-	GPIOA->ODR &= ~(1 << CS);
+void TIM14_Irq()
+{
+	oven_tick(INTERVAL / 1000.f);
 
-	while (SPI1->SR & SPI_SR_RXNE) {
-		volatile char x = SPI1->DR;
-		(void) x;
-	}
-
-	SPI1->CR1 |= SPI_CR1_SPE;
-
-	for (int i = 0; i < 4; i++) {
-		if (i == 3) {
-			SPI1->CR1 &= ~SPI_CR1_SPE;
-		}
-
-		while (!(SPI1->SR & SPI_SR_RXNE)) {
-			__NOP();
-		}
-
-		((volatile uint8_t *) &thermo)[3 - i] = SPI1->DR;
-	}
-
-	GPIOA->ODR |= (1 << CS);
-
-	while (SPI1->SR & SPI_SR_BSY) {
-		__NOP();
-	}
-
-	while (SPI1->SR & SPI_SR_FRLVL) {
-		volatile char x = SPI1->DR;
-		(void) x;
-	}
-}
-
-#define SETUP_TIME 4
-
-void TIM14_Irq() {
-	struct TempPoint {
-		int end_time, end_temp;
-	} temp_data [] = {
-		{0, 0},
-		{90, 90},
-		{180, 130},
-		{210, 138},
-		{240, 165},
-		{270, 138},
-		{390, 0}
-	}, *prev = 0, *next = 0;
-
-	static int blink = 0;
-	static int progress = 0;
-
-	spi_thermo_recv();
-
-	GPIOA->ODR |= (1 << LED_G) | (1 << LED_B);
-
-	int fault = 0;
-	if (thermo.OC) {
-		fault = 1;
-		openocd_send_str("Open circuit\n");
-	}
-	if (thermo.SCG) {
-		fault = 1;
-		openocd_send_str("Short circuit to Vcc\n");
-	}
-	if (thermo.SCV) {
-		fault = 1;
-		openocd_send_str("Short circuit to GND\n");
-	}
-	if (thermo._1) {
-		fault = 1;
-		openocd_send_str("Expected D3 = 0\n");
-	}
-	if (thermo._2) {
-		fault = 1;
-		openocd_send_str("Expected D17 = 0\n");
-	}
-
-	if (!fault && (thermo.fault || thermo.thermo_temp == 0x1FFF)) {
-		fault = 1;
-		openocd_send_str("Unknown fault\n");
-	}
-
-	if (fault) {
-		if (blink ^= 1) {
-			GPIOA->ODR &= ~((1 << LED_B) | (1 << LED_G));
-		}
-
-		progress = 0;
-
-		GPIOA->ODR &= ~(1 << RELAY);
-
-		goto reset_timer;
-	}
-
-	if (progress < SETUP_TIME) {
-		progress++;
-		blink = 0;
-
-		GPIOA->ODR &= ~((1 << LED_B) | (1 << LED_G));
-
-		goto reset_timer;
-	}
-
-	for (unsigned int i = 0; i < sizeof(temp_data) / sizeof(struct TempPoint); i++) {
-		if (temp_data[i].end_time * 2 + SETUP_TIME > progress) {
-			prev = &temp_data[i - 1];
-			next = &temp_data[i];
-			break;
-		}
-	}
-
-	if (!next) {
-		GPIOA->ODR &= ~((1 << RELAY) | (1 << LED_G));
-		goto reset_timer;
-	}
-
-	int time_elapsed = progress - SETUP_TIME - prev->end_time * 2;
-	int duration = next->end_time * 2 - prev->end_time * 2;
-	int temp_diff = next->end_temp - prev->end_temp;
-	int target_temp = prev->end_temp + temp_diff * time_elapsed / duration;
-
-	if ((thermo.thermo_temp >> 2) < target_temp) {
-		GPIOA->ODR |= (1 << RELAY);
-	} else {
-		GPIOA->ODR &= ~(1 << RELAY);
-	}
-
-	if (!(blink ^= 1)) {
-		GPIOA->ODR &= ~(1 << LED_B);
-	}
-
-	progress++;
-
-reset_timer:
 	TIM14->SR &= ~TIM_SR_UIF;
 	TIM14->CNT = 0;
 	TIM14->CR1 |= TIM_CR1_CEN;
 }
 
-void boot() {
+void boot()
+{
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
 	GPIOA->MODER |= (1 << (2 * LED_B))
 		| (1 << (2 * LED_G))
@@ -212,8 +64,12 @@ void boot() {
 
 	GPIOA->ODR = 0;
 
-	spi_setup();
-	timer_setup();
+	spi_thermo_init();
+	oven_init();
+
+	usb_init();
+
+	timer_init();
 
 	while (1) {
 		__NOP();

@@ -17,35 +17,37 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include <string.h>
+#ifndef COMMON_H
+#define COMMON_H
 
-static inline void copy_data()
-{
-	extern char _sdata, _edata, _sidata;
+#include <stdint.h>
 
-	memcpy(&_sdata, &_sidata, &_edata - &_sdata);
-}
+enum {
+	USB_PACKET_FAULT,
+	USB_PACKET_TEMP,
+};
 
-static inline void clear_bss()
-{
-	extern char _sbss, _ebss;
+enum thermo_fault {
+	THERMO_NO_FAULT = 0,
+	THERMO_UNKNOWN,
+	THERMO_OPEN_CIRCUIT,
+	THERMO_SHORT_TO_VCC,
+	THERMO_SHORT_TO_GND,
+	THERMO_D3,
+	THERMO_D17,
+};
 
-	memset(&_sbss, 0, &_ebss - &_sbss);
-}
+struct usb_packet_fault {
+	uint8_t length;
+	uint8_t type;
+	uint8_t fault;
+} __attribute__((packed));
 
-void reset()
-{
-	extern void boot();
-	extern void __libc_init_array();
+struct usb_packet_temp {
+	uint8_t length;
+	uint8_t type;
+	float temp;
+	float target;
+} __attribute__((packed));
 
-	copy_data();
-	clear_bss();
-
-	__libc_init_array();
-
-	boot();
-
-	while (1) {
-		__asm__ __volatile__("NOP");
-	}
-}
+#endif /* COMMON_H */

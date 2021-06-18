@@ -10,17 +10,14 @@ CFLAGS += -DSTM32F042x6
 
 CFLAGS += -I/opt/STM32/STM32F0
 CFLAGS += -I/usr/arm-none-eabi/include/
+CFLAGS += -I..
 
-ifeq ($(DEBUG),1)
-CFLAGS += -Og -ggdb -DDEBUG
-else
-CFLAGS += -Os
-endif
+CFLAGS += -O2
 
 stm32.bin: stm32
 	$(OBJCOPY) $^ $@ -O binary
 
-stm32: vec.o main.o boot.o
+stm32: vec.o main.o oven.o spi_thermo.o usb.o boot.o
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 flash: stm32.bin

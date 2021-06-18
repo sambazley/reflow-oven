@@ -17,35 +17,24 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include <string.h>
+#ifndef SPI_THERMO_H
+#define SPI_THERMO_H
 
-static inline void copy_data()
-{
-	extern char _sdata, _edata, _sidata;
+#include <stdint.h>
 
-	memcpy(&_sdata, &_sidata, &_edata - &_sdata);
-}
+struct thermo_data {
+	volatile uint8_t OC : 1;
+	volatile uint8_t SCG : 1;
+	volatile uint8_t SCV : 1;
+	volatile uint8_t _1 : 1;
+	volatile uint16_t ref_temp : 12;
+	volatile uint8_t fault : 1;
+	volatile uint8_t _2 : 1;
+	volatile uint16_t thermo_temp : 14;
+} __attribute__((packed));
 
-static inline void clear_bss()
-{
-	extern char _sbss, _ebss;
+void spi_thermo_recv(struct thermo_data *thermo);
+int thermo_fault_check(struct thermo_data thermo);
+void spi_thermo_init();
 
-	memset(&_sbss, 0, &_ebss - &_sbss);
-}
-
-void reset()
-{
-	extern void boot();
-	extern void __libc_init_array();
-
-	copy_data();
-	clear_bss();
-
-	__libc_init_array();
-
-	boot();
-
-	while (1) {
-		__asm__ __volatile__("NOP");
-	}
-}
+#endif /* SPI_THERMO_H */

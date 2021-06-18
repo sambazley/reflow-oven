@@ -52,4 +52,4 @@ none: b .
 .word none          /* 28 */
 .word none          /* 29 */
 .word none          /* 30 */
-.word none          /* 31 */
+.word usb_irq       /* 31 */

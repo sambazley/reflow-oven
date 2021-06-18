@@ -17,35 +17,15 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include <string.h>
+#ifndef USB_H
+#define USB_H
 
-static inline void copy_data()
-{
-	extern char _sdata, _edata, _sidata;
+#include "common.h"
+#include "spi_thermo.h"
+#include <stdint.h>
 
-	memcpy(&_sdata, &_sidata, &_edata - &_sdata);
-}
+void usb_init();
+void usb_send_fault(enum thermo_fault fault);
+void usb_send_temp(float temp, float target);
 
-static inline void clear_bss()
-{
-	extern char _sbss, _ebss;
-
-	memset(&_sbss, 0, &_ebss - &_sbss);
-}
-
-void reset()
-{
-	extern void boot();
-	extern void __libc_init_array();
-
-	copy_data();
-	clear_bss();
-
-	__libc_init_array();
-
-	boot();
-
-	while (1) {
-		__asm__ __volatile__("NOP");
-	}
-}
+#endif /* USB_H */
