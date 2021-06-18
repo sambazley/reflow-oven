@@ -97,7 +97,8 @@ void oven_tick(float interval)
 	GPIOA->ODR |= (1 << LED_G) | (1 << LED_B);
 
 	if (!oven_en) {
-		GPIOA->ODR &= ~((1 << LED_B) | (1 << LED_G));
+		GPIOA->ODR &= ~((1 << LED_B) | (1 << LED_G) | (1 << RELAY));
+
 		return;
 	}
 

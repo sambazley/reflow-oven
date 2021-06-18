@@ -193,6 +193,15 @@ int main(int argc, char *argv[])
 			break;
 		}
 
+		r = libusb_bulk_transfer(oven, 0x01, 0, 0, 0, 0);
+
+		if (r < 0) {
+			if (rbuf) {
+				free(rbuf);
+			}
+			break;
+		}
+
 		struct usb_packet_temp *data = (struct usb_packet_temp *) rbuf;
 
 		if (data->temp == 0 && data->target == 0) {

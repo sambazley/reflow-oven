@@ -470,6 +470,8 @@ static void on_control_in()
 	}
 }
 
+static int ackd = 1;
+
 static void on_bulk_out()
 {
 	static union usb_packet_out packet;
@@ -477,6 +479,13 @@ static void on_bulk_out()
 
 	volatile uint8_t received = btable[1].rx.count & 0x3ff;
 	uint8_t *data = (uint8_t *) pma_addr(1, PMA_RX);
+
+	ackd = 1;
+
+	if (received == 0) {
+		total_received = 0;
+		return;
+	}
 
 	if (total_received && total_received + received > packet.any.length) {
 		total_received = 0;
@@ -515,6 +524,11 @@ void usb_send_fault(enum thermo_fault fault)
 
 void usb_send_temp(float temp, float target)
 {
+	if (!ackd) {
+		oven_enable(0);
+		return;
+	}
+
 	static struct usb_packet_temp data = {
 		sizeof(data),
 		USB_PACKET_TEMP,
@@ -526,6 +540,8 @@ void usb_send_temp(float temp, float target)
 	data.target = target;
 
 	usb_send_data(2, (uint8_t *) &data, sizeof(data), 0);
+
+	ackd = 0;
 }
 
 static void on_correct_transfer()
