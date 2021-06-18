@@ -21,6 +21,7 @@
 #include "common.h"
 #include "oven.h"
 #include <stm32f0xx.h>
+#include <string.h>
 
 #define uart_send_str(...)
 #define uart_send_int(...)
@@ -471,13 +472,32 @@ static void on_control_in()
 
 static void on_bulk_out()
 {
+	static union usb_packet_out packet;
+	static uint8_t total_received = 0;
+
+	volatile uint8_t received = btable[1].rx.count & 0x3ff;
 	uint8_t *data = (uint8_t *) pma_addr(1, PMA_RX);
 
-	switch (data[0]) {
-	case 0:
+	if (total_received && total_received + received > packet.any.length) {
+		total_received = 0;
+		return;
+	}
+
+	memcpy(((char *) &packet) + total_received, data, received);
+
+	total_received += received;
+
+	if (total_received < packet.any.length) {
+		return;
+	}
+
+	switch (packet.any.type) {
+	case USB_PACKET_START:
 		oven_enable(1);
 		break;
 	}
+
+	total_received = 0;
 }
 
 void usb_send_fault(enum thermo_fault fault)

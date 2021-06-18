@@ -25,6 +25,7 @@
 enum {
 	USB_PACKET_FAULT,
 	USB_PACKET_TEMP,
+	USB_PACKET_START,
 };
 
 enum thermo_fault {
@@ -35,6 +36,11 @@ enum thermo_fault {
 	THERMO_SHORT_TO_GND,
 	THERMO_D3,
 	THERMO_D17,
+};
+
+struct usb_packet_any {
+	uint8_t length;
+	uint8_t type;
 };
 
 struct usb_packet_fault {
@@ -49,5 +55,21 @@ struct usb_packet_temp {
 	float temp;
 	float target;
 } __attribute__((packed));
+
+union usb_packet_in {
+	struct usb_packet_any any;
+	struct usb_packet_fault fault;
+	struct usb_packet_temp temp;
+};
+
+struct usb_packet_start {
+	uint8_t length;
+	uint8_t type;
+};
+
+union usb_packet_out {
+	struct usb_packet_any any;
+	struct usb_packet_start start;
+};
 
 #endif /* COMMON_H */

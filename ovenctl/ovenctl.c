@@ -79,6 +79,33 @@ end:
 	return r;
 }
 
+static int send_data(libusb_device_handle *dev, union usb_packet_out *packet)
+{
+	int transfered = 0;
+	int r;
+
+	uint8_t packet_length = ((uint8_t *) packet)[0];
+
+	while (1) {
+		unsigned char *src = ((unsigned char *) packet) + transfered;
+		r = libusb_bulk_transfer(dev, 0x01, src, packet->any.length, &transfered, 0);
+		if (r < 0) {
+			goto end;
+		}
+
+		if (transfered > packet->start.length) {
+			r = -E2BIG;
+			break;
+		} else if (transfered == packet_length) {
+			r = 0;
+			break;
+		}
+	}
+
+end:
+	return r;
+}
+
 int main(int argc, char *argv[])
 {
 	int r;
@@ -136,8 +163,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
-	unsigned char buf [8] = {0};
-	int transfered;
+	union usb_packet_out packet;
 
 	r = libusb_claim_interface(oven, 0);
 	if (r < 0) {
@@ -146,7 +172,10 @@ int main(int argc, char *argv[])
 	}
 	iface_claimed = 1;
 
-	r = libusb_bulk_transfer(oven, 0x01, buf, sizeof(buf), &transfered, 0);
+	packet.start.length = sizeof(struct usb_packet_start);
+	packet.start.type = USB_PACKET_START;
+
+	r = send_data(oven, &packet);
 	if (r < 0) {
 		fprintf(stderr, "Failed to send command %d\n", r);
 		goto exit;
