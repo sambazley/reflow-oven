@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+static libusb_device_handle *oven = 0;
+static int libusb_inited = 0;
+static int iface_claimed = 0;
+
 static int on_fault(struct usb_packet_fault *fault)
 {
 	switch (fault->fault) {
@@ -106,16 +110,33 @@ end:
 	return r;
 }
 
-int main(int argc, char *argv[])
+static void close_dev()
+{
+	if (iface_claimed) {
+		libusb_release_interface(oven, 0);
+		iface_claimed = 0;
+	}
+
+	if (oven) {
+		libusb_close(oven);
+	}
+
+	if (libusb_inited) {
+		libusb_exit(NULL);
+		libusb_inited = 0;
+	}
+}
+
+static int open_dev()
 {
 	int r;
-	int iface_claimed = 0;
 	ssize_t dev_cnt;
 	libusb_device **devs;
-	libusb_device_handle *oven = 0;
 
-	(void) argc;
-	(void) argv;
+	if (libusb_inited) {
+		fprintf(stderr, "libusb already initialised\n");
+		return 1;
+	}
 
 	r = libusb_init(NULL);
 
@@ -123,8 +144,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Failed to initialize libusb\n");
 		return r;
 	}
-
-	libusb_set_option(NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+	libusb_inited = 1;
 
 	r = dev_cnt = libusb_get_device_list(NULL, &devs);
 	if (r < 0) {
@@ -163,14 +183,31 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
-	union usb_packet_out packet;
-
 	r = libusb_claim_interface(oven, 0);
 	if (r < 0) {
 		fprintf(stderr, "Failed to claim interface\n");
 		goto exit;
 	}
 	iface_claimed = 1;
+
+	return 0;
+exit:
+	close_dev();
+	return r;
+}
+
+static int start(int argc, char *argv[])
+{
+	int r;
+
+	(void) argc;
+	(void) argv;
+
+	if ((r = open_dev())) {
+		return r;
+	}
+
+	union usb_packet_out packet;
 
 	packet.start.length = sizeof(struct usb_packet_start);
 	packet.start.type = USB_PACKET_START;
@@ -209,17 +246,94 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		printf("%f %f\n", data->temp, data->target);
+		printf("%.2f %.2f\n", data->temp, data->target);
 		fflush(stdout);
 		free(rbuf);
 	}
 
 exit:
-	if (iface_claimed) {
-		libusb_release_interface(oven, 0);
-	}
-
-	libusb_close(oven);
+	close_dev();
 
 	return r;
+}
+
+int query(int argc, char *argv[]) {
+	int r;
+
+	(void) argc;
+	(void) argv;
+
+	if ((r = open_dev())) {
+		return r;
+	}
+
+	union usb_packet_out out;
+
+	out.start.length = sizeof(struct usb_packet_query_temp);
+	out.start.type = USB_PACKET_QUERY_TEMP;
+
+	r = send_data(oven, &out);
+	if (r < 0) {
+		fprintf(stderr, "Failed to send command %d\n", r);
+		goto exit;
+	}
+
+	uint8_t *rbuf;
+	size_t len;
+	r = receive_data(oven, &rbuf, &len);
+
+	if (r < 0) {
+		if (rbuf) {
+			free(rbuf);
+		}
+		goto exit;
+	}
+
+	struct usb_packet_temp *data = (struct usb_packet_temp *) rbuf;
+
+	printf("%.2f\n", data->temp);
+
+exit:
+	close_dev();
+
+	return r;
+}
+
+static struct cmd {
+	const char *cmd;
+	const char *desc;
+	int (*func)(int argc, char *argv[]);
+} cmds [] = {
+	{"start", "Start the oven and print temperature values", start},
+	{"query", "Queries the current temperature", query}
+};
+
+#define CMD_COUNT (sizeof(cmds) / sizeof(struct cmd))
+
+static void print_usage(char *argv)
+{
+	fprintf(stderr, "Usage: %s [command]\n\n", argv);
+	fprintf(stderr, "Commands:\n");
+
+	for (size_t i = 0; i < CMD_COUNT; i++) {
+		fprintf(stderr, "  %s -- %s\n", cmds[i].cmd, cmds[i].desc);
+	}
+}
+
+int main(int argc, char *argv[])
+{
+	if (argc == 1) {
+		print_usage(argv[0]);
+		return 1;
+	}
+
+	for (size_t i = 0; i < CMD_COUNT; i++) {
+		if (strcmp(argv[1], cmds[i].cmd) == 0) {
+			return cmds[i].func(argc, argv);
+		}
+	}
+
+	print_usage(argv[0]);
+
+	return 1;
 }

@@ -71,6 +71,22 @@ void oven_enable(int en)
 	oven_en = en;
 }
 
+void oven_query_temp()
+{
+	struct thermo_data thermo;
+	enum thermo_fault fault;
+
+	spi_thermo_recv(&thermo);
+	fault = thermo_fault_check(thermo);
+
+	if (fault) {
+		usb_send_fault(fault);
+		return;
+	}
+
+	usb_send_temp(thermo.thermo_temp / 4.f, 0.f);
+}
+
 static float calculate_output(struct pid *pid, volatile struct temp_point *tp,
 		float t, float sp, float interval)
 {

@@ -26,6 +26,7 @@ enum {
 	USB_PACKET_FAULT,
 	USB_PACKET_TEMP,
 	USB_PACKET_START,
+	USB_PACKET_QUERY_TEMP,
 };
 
 enum thermo_fault {
@@ -67,9 +68,15 @@ struct usb_packet_start {
 	uint8_t type;
 };
 
+struct usb_packet_query_temp {
+	uint8_t length;
+	uint8_t type;
+};
+
 union usb_packet_out {
 	struct usb_packet_any any;
 	struct usb_packet_start start;
+	struct usb_packet_query_temp query_temp;
 };
 
 #endif /* COMMON_H */

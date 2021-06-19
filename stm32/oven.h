@@ -23,5 +23,6 @@
 void oven_init();
 void oven_tick(float interval);
 void oven_enable(int en);
+void oven_query_temp();
 
 #endif /* OVEN_H */

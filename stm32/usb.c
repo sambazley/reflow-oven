@@ -504,6 +504,9 @@ static void on_bulk_out()
 	case USB_PACKET_START:
 		oven_enable(1);
 		break;
+	case USB_PACKET_QUERY_TEMP:
+		oven_query_temp();
+		break;
 	}
 
 	total_received = 0;
