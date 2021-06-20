@@ -76,6 +76,7 @@ void oven_query_temp()
 	struct thermo_data thermo;
 	enum thermo_fault fault;
 
+	spi_thermo_recv(&thermo); //flush
 	spi_thermo_recv(&thermo);
 	fault = thermo_fault_check(thermo);
 
